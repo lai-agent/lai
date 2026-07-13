@@ -11,6 +11,7 @@ checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
 [[package]]
 name = "alisp"
 version = "0.1.0"
+source = "git+https://github.com/jihoo12/alisp#8e610e65d85c9fc353ee34b5c8e9eaf57897b40b"
 
 [[package]]
 name = "base64"
@@ -102,16 +103,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
 dependencies = [
  "litrs",
-]
-
-[[package]]
-name = "elf"
-version = "0.1.0"
-dependencies = [
- "alisp",
- "serde",
- "serde_json",
- "ureq",
 ]
 
 [[package]]
@@ -296,6 +287,16 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+
+[[package]]
+name = "lai"
+version = "0.1.0"
+dependencies = [
+ "alisp",
+ "serde",
+ "serde_json",
+ "ureq",
+]
 
 [[package]]
 name = "libc"

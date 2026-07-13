@@ -17,8 +17,8 @@ fn main() {
             Box::new(llm::llamacpp::LlamaCppBackend::new(&url, &model))
         }
         _ => {
-            eprintln!("elf agent (type your message, Ctrl+D to exit)");
-            eprintln!("usage: elf [--llama <url> <model>]");
+            eprintln!("lai agent (type your message, Ctrl+D to exit)");
+            eprintln!("usage: lai [--llama <url> <model>]");
             Box::new(llm::stdin::StdinBackend)
         }
     };

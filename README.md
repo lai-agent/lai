@@ -1,4 +1,4 @@
-# elf
+# lai
 
 AI agent that uses alisp instead of JSON for tool calling.
 
@@ -22,7 +22,7 @@ cargo run
 # Start llama.cpp with an OpenAI-compatible endpoint
 llama-server -m model.gguf --port 8080
 
-# Connect elf
+# Connect lai
 cargo run -- --llama http://localhost:8080 local
 ```
 
