@@ -1,4 +1,6 @@
+use crate::config::AgentConfig;
 use crate::llm::{LlmBackend, Message, Role};
+use crate::skills::Skill;
 use crate::tools::AlispHost;
 
 const SYSTEM_PROMPT: &str = r#"You are an AI agent. You can use alisp to interact with the system.
@@ -238,31 +240,129 @@ JSON <-> alisp mapping: null<->nil, true/false<->true/false, number<->number, st
 When you have completed the task, respond with your final answer directly (no code block needed).
 Always explain what you are doing before and after running code."#;
 
+/// Rough token estimation: ~4 chars per token for English text.
+fn estimate_tokens(text: &str) -> usize {
+    text.len() / 4
+}
+
 pub struct Agent {
     messages: Vec<Message>,
+    tools: AlispHost,
+    max_turns: u32,
+    max_context_tokens: usize,
 }
 
 impl Agent {
-    pub fn new() -> Self {
+    pub fn new(config: AgentConfig, skills: &[Skill]) -> Self {
+        let mut tools = AlispHost::new();
+
+        let mut system_prompt = SYSTEM_PROMPT.to_string();
+
+        for skill in skills {
+            if !skill.prompt.is_empty() {
+                system_prompt.push_str(&format!("\n\n{}", skill.prompt));
+            }
+            if !skill.init_code.is_empty() {
+                if let Err(e) = tools.execute(&skill.init_code) {
+                    eprintln!("warning: skill '{}' init failed: {}", skill.name, e);
+                }
+            }
+        }
+
+        system_prompt.push_str(&Skill::skill_index(skills));
+
         Self {
             messages: vec![Message {
                 role: Role::System,
-                content: SYSTEM_PROMPT.to_string(),
+                content: system_prompt,
             }],
+            tools,
+            max_turns: config.max_turns,
+            max_context_tokens: config.max_context_tokens,
         }
     }
 
+    fn total_tokens(&self) -> usize {
+        self.messages.iter().map(|m| estimate_tokens(&m.content)).sum()
+    }
+
+    fn truncate_context(&mut self) {
+        while self.total_tokens() > self.max_context_tokens && self.messages.len() > 2 {
+            let second = &self.messages[1];
+            if second.role == Role::User {
+                let removed = self.messages.remove(1);
+                let removed_tokens = estimate_tokens(&removed.content);
+
+                self.messages.insert(
+                    1,
+                    Message {
+                        role: Role::User,
+                        content: format!(
+                            "[Earlier message truncated ({} tokens)]",
+                            removed_tokens
+                        ),
+                    },
+                );
+            } else {
+                break;
+            }
+        }
+
+        if self.total_tokens() > self.max_context_tokens && self.messages.len() > 3 {
+            let removed = self.messages.remove(1);
+            let removed_tokens = estimate_tokens(&removed.content);
+            self.messages.insert(
+                1,
+                Message {
+                    role: Role::User,
+                    content: format!(
+                        "[Earlier messages truncated ({} tokens)]",
+                        removed_tokens
+                    ),
+                },
+            );
+        }
+    }
+
+    #[allow(dead_code)]
     pub fn run(&mut self, backend: &mut dyn LlmBackend, user_input: &str) -> Result<String, String> {
         self.messages.push(Message {
             role: Role::User,
             content: user_input.to_string(),
         });
 
-        let mut tools = AlispHost::new();
-        let max_turns = 20;
+        self.truncate_context();
 
-        for _ in 0..max_turns {
-            let response = backend.complete(&self.messages)?;
+        self.run_loop(backend, None)
+    }
+
+    pub fn run_streaming(
+        &mut self,
+        backend: &mut dyn LlmBackend,
+        user_input: &str,
+        on_token: &mut dyn FnMut(&str),
+    ) -> Result<String, String> {
+        self.messages.push(Message {
+            role: Role::User,
+            content: user_input.to_string(),
+        });
+
+        self.truncate_context();
+
+        self.run_loop(backend, Some(on_token))
+    }
+
+    fn run_loop(
+        &mut self,
+        backend: &mut dyn LlmBackend,
+        mut on_token: Option<&mut dyn FnMut(&str)>,
+    ) -> Result<String, String> {
+        for _ in 0..self.max_turns {
+            let response = if let Some(ref mut callback) = on_token {
+                backend.complete_streaming(&self.messages, callback)?
+            } else {
+                backend.complete(&self.messages)?
+            };
 
             if response.trim().is_empty() {
                 return Ok(String::new());
@@ -285,7 +385,7 @@ impl Agent {
 
             let mut tool_output = String::new();
             for code in &blocks {
-                let result = tools.execute(code);
+                let result = self.tools.execute(code);
                 let output = match result {
                     Ok(val) => val,
                     Err(e) => format!("error: {}", e),
@@ -300,6 +400,11 @@ impl Agent {
         }
 
         Err("max turns exceeded".to_string())
+    }
+
+    #[allow(dead_code)]
+    pub fn clear_history(&mut self) {
+        self.messages.truncate(1);
     }
 }
 

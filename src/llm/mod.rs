@@ -1,5 +1,6 @@
 pub mod stdin;
 pub mod llamacpp;
+pub mod openai;
 
 use std::fmt;
 
@@ -30,4 +31,12 @@ impl fmt::Display for Role {
 
 pub trait LlmBackend {
     fn complete(&mut self, messages: &[Message]) -> Result<String, String>;
+
+    fn complete_streaming(
+        &mut self,
+        messages: &[Message],
+        _on_token: &mut dyn FnMut(&str),
+    ) -> Result<String, String> {
+        self.complete(messages)
+    }
 }

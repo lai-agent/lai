@@ -1,0 +1,39 @@
+; name: git
+; description: Git repository operations and status
+; prompt: You are a git expert. Use (git-status), (git-log), (git-diff), (git-branch-list), and (git-commit-info) to inspect and manage git repositories. Always check status before making changes.
+
+(defn git-status ()
+  (exec "git status"))
+
+(defn git-log ()
+  (exec "git log --oneline -20"))
+
+(defn git-diff ()
+  (exec "git diff"))
+
+(defn git-diff-staged ()
+  (exec "git diff --cached"))
+
+(defn git-branch-list ()
+  (exec "git branch -a"))
+
+(defn git-commit-info ()
+  (exec "git log -1 --pretty=format:\"%h %s (%an, %ar)\""))
+
+(defn git-add (path)
+  (exec (str "git add " path)))
+
+(defn git-commit (msg)
+  (exec (str "git commit -m \"" msg "\"")))
+
+(defn git-push ()
+  (exec "git push"))
+
+(defn git-pull ()
+  (exec "git pull"))
+
+(defn git-stash ()
+  (exec "git stash"))
+
+(defn git-stash-pop ()
+  (exec "git stash pop"))

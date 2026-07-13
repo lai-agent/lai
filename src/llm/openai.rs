@@ -3,20 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
-pub struct LlamaCppBackend {
+pub struct OpenAIBackend {
     url: String,
     model: String,
+    api_key: String,
     agent: ureq::Agent,
     temperature: f64,
     max_tokens: u32,
-}
-
-fn make_agent() -> ureq::Agent {
-    ureq::Agent::new_with_config(
-        ureq::config::Config::builder()
-            .timeout_global(Some(Duration::from_secs(300)))
-            .build(),
-    )
 }
 
 #[derive(Serialize)]
@@ -31,7 +24,7 @@ struct ChatRequest {
     stream: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 struct ChatMessage {
     role: String,
     content: String,
@@ -52,22 +45,38 @@ struct ChatResponseMessage {
     content: Option<String>,
 }
 
-impl LlamaCppBackend {
+fn make_agent() -> ureq::Agent {
+    ureq::Agent::new_with_config(
+        ureq::config::Config::builder()
+            .timeout_global(Some(Duration::from_secs(300)))
+            .build(),
+    )
+}
+
+impl OpenAIBackend {
     #[allow(dead_code)]
-    pub fn new(url: &str, model: &str) -> Self {
+    pub fn new(url: &str, model: &str, api_key: &str) -> Self {
         Self {
             url: url.trim_end_matches('/').to_string(),
             model: model.to_string(),
+            api_key: api_key.to_string(),
             agent: make_agent(),
             temperature: 0.7,
             max_tokens: 4096,
         }
     }
 
-    pub fn with_params(url: &str, model: &str, temperature: f64, max_tokens: u32) -> Self {
+    pub fn with_params(
+        url: &str,
+        model: &str,
+        api_key: &str,
+        temperature: f64,
+        max_tokens: u32,
+    ) -> Self {
         Self {
             url: url.trim_end_matches('/').to_string(),
             model: model.to_string(),
+            api_key: api_key.to_string(),
             agent: make_agent(),
             temperature,
             max_tokens,
@@ -78,45 +87,64 @@ impl LlamaCppBackend {
         messages
             .iter()
             .map(|m| {
-                let (role, content) = match m.role {
-                    Role::System => ("system".to_string(), m.content.clone()),
-                    Role::User => ("user".to_string(), m.content.clone()),
-                    Role::Assistant => ("assistant".to_string(), m.content.clone()),
-                    Role::Tool => (
-                        "user".to_string(),
-                        format!("[Tool Result]\n{}", m.content),
-                    ),
+                let role = match m.role {
+                    Role::System => "system",
+                    Role::User => "user",
+                    Role::Assistant => "assistant",
+                    Role::Tool => "user",
                 };
-                ChatMessage { role, content }
+                let content = if m.role == Role::Tool {
+                    format!("[Tool Result]\n{}", m.content)
+                } else {
+                    m.content.clone()
+                };
+                ChatMessage {
+                    role: role.to_string(),
+                    content,
+                }
             })
             .collect()
     }
-}
 
-impl LlmBackend for LlamaCppBackend {
-    fn complete(&mut self, messages: &[Message]) -> Result<String, String> {
+    fn send_request(
+        &self,
+        messages: &[ChatMessage],
+        stream: bool,
+    ) -> Result<ureq::Body, String> {
         let request = ChatRequest {
             model: self.model.clone(),
-            messages: Self::map_messages(messages),
+            messages: messages.to_vec(),
             temperature: Some(self.temperature),
             max_tokens: Some(self.max_tokens),
-            stream: false,
+            stream,
         };
 
         let url = format!("{}/v1/chat/completions", self.url);
-        let mut resp = self
+        let resp = self
             .agent
             .post(&url)
             .header("Content-Type", "application/json")
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.api_key),
+            )
             .send_json(&request)
             .map_err(|e| format!("request failed: {}", e))?;
 
-        let body: ChatResponse = resp
-            .body_mut()
+        Ok(resp.into_body())
+    }
+}
+
+impl LlmBackend for OpenAIBackend {
+    fn complete(&mut self, messages: &[Message]) -> Result<String, String> {
+        let chat_messages = Self::map_messages(messages);
+        let mut body = self.send_request(&chat_messages, false)?;
+
+        let resp: ChatResponse = body
             .read_json()
             .map_err(|e| format!("read body: {}", e))?;
 
-        body.choices
+        resp.choices
             .first()
             .and_then(|c| c.message.content.clone())
             .ok_or_else(|| "empty response".to_string())
@@ -127,23 +155,10 @@ impl LlmBackend for LlamaCppBackend {
         messages: &[Message],
         on_token: &mut dyn FnMut(&str),
     ) -> Result<String, String> {
-        let request = ChatRequest {
-            model: self.model.clone(),
-            messages: Self::map_messages(messages),
-            temperature: Some(self.temperature),
-            max_tokens: Some(self.max_tokens),
-            stream: true,
-        };
+        let chat_messages = Self::map_messages(messages);
+        let mut body = self.send_request(&chat_messages, true)?;
 
-        let url = format!("{}/v1/chat/completions", self.url);
-        let mut resp = self
-            .agent
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .send_json(&request)
-            .map_err(|e| format!("request failed: {}", e))?;
-
-        let reader = resp.body_mut().as_reader();
+        let reader = body.as_reader();
         let buf_reader = BufReader::new(reader);
         let mut full_response = String::new();
 
