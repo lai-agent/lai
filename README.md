@@ -1,6 +1,6 @@
 # lai
 
-AI agent that uses alisp instead of JSON for tool calling.
+AI agent that uses alisp
 
 The model thinks, generates alisp code, executes it, and feeds results back. No JSON schemas, no function definitions — just Lisp.
 
