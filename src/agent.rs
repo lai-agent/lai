@@ -1,5 +1,6 @@
 use crate::config::AgentConfig;
 use crate::llm::{LlmBackend, Message, Role};
+use crate::security::{SecurityConfig, SecurityPolicy};
 use crate::skills::Skill;
 use crate::tools::AlispHost;
 
@@ -253,8 +254,9 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(config: AgentConfig, skills: &[Skill]) -> Self {
-        let mut tools = AlispHost::new();
+    pub fn new(config: AgentConfig, security: SecurityConfig, skills: &[Skill]) -> Self {
+        let policy = SecurityPolicy::new(security);
+        let mut tools = AlispHost::with_policy(policy);
 
         let mut system_prompt = SYSTEM_PROMPT.to_string();
 

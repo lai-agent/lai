@@ -1,6 +1,7 @@
 mod agent;
 mod config;
 mod llm;
+mod security;
 mod skills;
 mod tools;
 
@@ -103,7 +104,7 @@ fn main() {
         eprintln!("loaded {} skill(s): {}", skills.len(), skills.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", "));
     }
 
-    let mut agent = Agent::new(config.agent, &skills);
+    let mut agent = Agent::new(config.agent, config.security, &skills);
 
     loop {
         eprint!("\nyou> ");

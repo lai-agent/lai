@@ -1,3 +1,4 @@
+use crate::security::SecurityConfig;
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -7,6 +8,8 @@ pub struct Config {
     pub backend: BackendConfig,
     #[serde(default)]
     pub agent: AgentConfig,
+    #[serde(default)]
+    pub security: SecurityConfig,
 }
 
 #[derive(Debug, Deserialize)]
