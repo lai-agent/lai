@@ -114,7 +114,7 @@ Skills extend the agent with custom functions and instructions. Place `.alisp` o
 
 ## Security
 
-lai includes a minimal security layer that checks code before execution.
+lai includes a security layer that checks code before execution.
 
 ### Modes
 
@@ -128,26 +128,58 @@ lai includes a minimal security layer that checks code before execution.
 
 ```toml
 [security]
-mode = "confirm"                    # "off", "confirm", or "strict"
-allow_network = true                # allow HTTP requests
+mode = "confirm"
 
-require_confirm_rm = true           # confirm before rm
-require_confirm_sudo = true         # confirm before sudo
-require_confirm_write_system = true # confirm before writing to system paths
+# Network control
+allow_network = true
+blocked_domains = ["malicious.com"]
+allowed_domains = ["api.github.com", "httpbin.org"]
 
-blocked_commands = ["rm -rf /", "mkfs"]
+# Dangerous operations
+require_confirm_rm = true
+require_confirm_sudo = true
+require_confirm_write_system = true
+require_confirm_eval = true
+
+# Blocked commands (always blocked in strict mode)
+blocked_commands = ["rm -rf /", "mkfs", ":(){ :|:& };:"]
+
+# Blocked alisp functions (always blocked in strict mode)
+blocked_functions = ["exit", "setenv"]
+
+# System paths (blocked from writes)
 blocked_paths = ["/etc", "/boot", "/sys", "/proc"]
+
+# Sandbox: restrict file writes to these paths
+sandbox_paths = ["/home/user/projects"]
+
+# Rate limiting
+max_ops_per_turn = 50
+
+# Output size limit
+max_output_bytes = 1048576  # 1MB
+
+# Audit logging
+audit_log = "/tmp/lai-audit.log"
 ```
 
 ### What it checks
 
-- **Dangerous shell commands** — `rm -rf /`, `mkfs`, fork bombs
-- **System paths** — writes to `/etc`, `/boot`, `/sys`, `/proc`
-- **sudo usage** — requires confirmation or blocked in strict mode
-- **Network access** — can be disabled entirely
-- **File deletion** — confirms before `rm` commands
+| Check | Confirm | Strict |
+|-------|---------|--------|
+| `rm` commands | prompt | prompt |
+| `sudo` | prompt | blocked |
+| `eval` | prompt | blocked |
+| System path writes | prompt | prompt |
+| Blocked commands | blocked | blocked |
+| Blocked functions | prompt | blocked |
+| Sandbox violations | prompt | prompt |
+| Domain blocklist | blocked | blocked |
+| Domain allowlist | blocked | blocked |
+| Rate limit (ops/turn) | blocked | blocked |
+| Output size limit | truncated | truncated |
 
-In `confirm` mode, the agent asks before proceeding:
+### Example
 
 ```
 ⚠ security: file deletion (rm) detected in: (exec "rm -rf build/")

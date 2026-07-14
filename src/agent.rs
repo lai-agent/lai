@@ -249,14 +249,15 @@ fn estimate_tokens(text: &str) -> usize {
 pub struct Agent {
     messages: Vec<Message>,
     tools: AlispHost,
+    policy: SecurityPolicy,
     max_turns: u32,
     max_context_tokens: usize,
 }
 
 impl Agent {
     pub fn new(config: AgentConfig, security: SecurityConfig, skills: &[Skill]) -> Self {
-        let policy = SecurityPolicy::new(security);
-        let mut tools = AlispHost::with_policy(policy);
+        let policy = SecurityPolicy::new(security.clone());
+        let mut tools = AlispHost::with_policy(policy.clone());
 
         let mut system_prompt = SYSTEM_PROMPT.to_string();
 
@@ -279,6 +280,7 @@ impl Agent {
                 content: system_prompt,
             }],
             tools,
+            policy,
             max_turns: config.max_turns,
             max_context_tokens: config.max_context_tokens,
         }
@@ -360,6 +362,8 @@ impl Agent {
         mut on_token: Option<&mut dyn FnMut(&str)>,
     ) -> Result<String, String> {
         for _ in 0..self.max_turns {
+            self.policy.start_turn();
+
             let response = if let Some(ref mut callback) = on_token {
                 backend.complete_streaming(&self.messages, callback)?
             } else {
@@ -392,6 +396,7 @@ impl Agent {
                     Ok(val) => val,
                     Err(e) => format!("error: {}", e),
                 };
+                let output = self.policy.check_output(&output);
                 tool_output.push_str(&format!("```\n{}\n```\n", output));
             }
 
