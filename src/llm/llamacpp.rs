@@ -1,6 +1,5 @@
-use super::{LlmBackend, Message, Role};
+use super::{parse_sse_stream, LlmBackend, Message, Role};
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
 pub struct LlamaCppBackend {
@@ -143,37 +142,6 @@ impl LlmBackend for LlamaCppBackend {
             .send_json(&request)
             .map_err(|e| format!("request failed: {}", e))?;
 
-        let reader = resp.body_mut().as_reader();
-        let buf_reader = BufReader::new(reader);
-        let mut full_response = String::new();
-
-        for line in buf_reader.lines() {
-            let line = line.map_err(|e| format!("read stream: {}", e))?;
-            let line = line.trim();
-
-            if line.is_empty() || !line.starts_with("data: ") {
-                continue;
-            }
-
-            let data = &line[6..];
-            if data == "[DONE]" {
-                break;
-            }
-
-            if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(choices) = chunk.get("choices").and_then(|c| c.as_array()) {
-                    if let Some(choice) = choices.first() {
-                        if let Some(delta) = choice.get("delta") {
-                            if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                full_response.push_str(content);
-                                on_token(content);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(full_response)
+        parse_sse_stream(resp.body_mut().as_reader(), on_token)
     }
 }

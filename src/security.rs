@@ -49,8 +49,6 @@ pub struct SecurityConfig {
     pub audit_log: Option<String>,
 }
 
-
-
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
@@ -66,10 +64,7 @@ impl Default for SecurityConfig {
                 "/sys".to_string(),
                 "/proc".to_string(),
             ],
-            blocked_functions: vec![
-                "exit".to_string(),
-                "setenv".to_string(),
-            ],
+            blocked_functions: vec!["exit".to_string(), "setenv".to_string()],
             require_confirm_rm: true,
             require_confirm_sudo: true,
             require_confirm_write_system: true,
@@ -117,45 +112,31 @@ impl Clone for SecurityPolicy {
     }
 }
 
+fn build_regex_list(patterns: &[String], fmt: impl Fn(&str) -> String) -> Vec<Regex> {
+    patterns
+        .iter()
+        .filter_map(|p| Regex::new(&fmt(p)).ok())
+        .collect()
+}
+
 impl SecurityPolicy {
     pub fn new(config: SecurityConfig) -> Self {
-        let blocked_cmd_re: Vec<Regex> = config
-            .blocked_commands
-            .iter()
-            .filter_map(|c| Regex::new(&format!("(?i){}", regex::escape(c))).ok())
-            .collect();
-
-        let blocked_path_re: Vec<Regex> = config
-            .blocked_paths
-            .iter()
-            .filter_map(|p| Regex::new(&format!("^{}", regex::escape(p))).ok())
-            .collect();
-
-        let blocked_func_re: Vec<Regex> = config
-            .blocked_functions
-            .iter()
-            .filter_map(|f| {
-                Regex::new(&format!(r#"\(\s*{}\b"#, regex::escape(f))).ok()
-            })
-            .collect();
-
-        let blocked_domain_re: Vec<Regex> = config
-            .blocked_domains
-            .iter()
-            .filter_map(|d| Regex::new(&regex::escape(d)).ok())
-            .collect();
-
-        let allowed_domain_re: Vec<Regex> = config
-            .allowed_domains
-            .iter()
-            .filter_map(|d| Regex::new(&regex::escape(d)).ok())
-            .collect();
-
-        let sandbox_re: Vec<Regex> = config
-            .sandbox_paths
-            .iter()
-            .filter_map(|p| Regex::new(&format!("^{}", regex::escape(p))).ok())
-            .collect();
+        let blocked_cmd_re = build_regex_list(&config.blocked_commands, |c| {
+            format!("(?i){}", regex::escape(c))
+        });
+        let blocked_path_re = build_regex_list(&config.blocked_paths, |p| {
+            format!("^{}", regex::escape(p))
+        });
+        let blocked_func_re = build_regex_list(&config.blocked_functions, |f| {
+            format!(r#"\(\s*{}\b"#, regex::escape(f))
+        });
+        let blocked_domain_re =
+            build_regex_list(&config.blocked_domains, |d| regex::escape(d));
+        let allowed_domain_re =
+            build_regex_list(&config.allowed_domains, |d| regex::escape(d));
+        let sandbox_re = build_regex_list(&config.sandbox_paths, |p| {
+            format!("^{}", regex::escape(p))
+        });
 
         let audit_path = config.audit_log.as_deref().map(PathBuf::from);
 
@@ -225,14 +206,9 @@ impl SecurityPolicy {
             return Err("security: network access disabled".to_string());
         }
 
-        if !self.config.blocked_domains.is_empty() {
-            for re in &self.blocked_domain_re {
-                if re.is_match(code) {
-                    return Err(format!(
-                        "security: blocked domain '{}'",
-                        re.as_str()
-                    ));
-                }
+        for re in &self.blocked_domain_re {
+            if re.is_match(code) {
+                return Err(format!("security: blocked domain '{}'", re.as_str()));
             }
         }
 
@@ -268,20 +244,14 @@ impl SecurityPolicy {
         }
 
         if self.config.require_confirm_write_system {
-            for re in &self.blocked_path_re {
-                if re.is_match(code) {
-                    reasons.push("writing to system path".to_string());
-                    break;
-                }
+            if self.blocked_path_re.iter().any(|re| re.is_match(code)) {
+                reasons.push("writing to system path".to_string());
             }
         }
 
         if self.config.mode == SecurityMode::Confirm {
-            for re in &self.blocked_func_re {
-                if re.is_match(code) {
-                    reasons.push("blocked function".to_string());
-                    break;
-                }
+            if self.blocked_func_re.iter().any(|re| re.is_match(code)) {
+                reasons.push("blocked function".to_string());
             }
         }
 
@@ -363,18 +333,36 @@ fn re_contains(text: &str, pattern: &str) -> bool {
 
 fn extract_url(code: &str) -> Option<String> {
     let re = Regex::new(r#""(https?://[^"]+)""#).ok()?;
-    re.captures(code).and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
+    re.captures(code)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
 }
 
 fn extract_path(code: &str) -> Option<String> {
     let re = Regex::new(r#""([^"]+)""#).ok()?;
-    re.captures(code).and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
+    re.captures(code)
+        .and_then(|c| c.get(1).map(|m| m.as_str().to_string()))
 }
 
 fn is_write_op(code: &str) -> bool {
-    let write_funcs = ["write", "write-range", "append", "insert-at", "remove-range", "rm", "delete", "mkdir", "cp", "copy", "mv", "move", "touch"];
+    let write_funcs = [
+        "write",
+        "write-range",
+        "append",
+        "insert-at",
+        "remove-range",
+        "rm",
+        "delete",
+        "mkdir",
+        "cp",
+        "copy",
+        "mv",
+        "move",
+        "touch",
+    ];
     let lower = code.to_lowercase();
-    write_funcs.iter().any(|f| lower.contains(&format!("({}", f)))
+    write_funcs
+        .iter()
+        .any(|f| lower.contains(&format!("({}", f)))
 }
 
 fn chrono_now() -> String {

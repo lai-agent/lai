@@ -2,6 +2,7 @@ mod agent;
 mod config;
 mod hotreload;
 mod llm;
+mod memory;
 mod security;
 mod skills;
 mod tools;
@@ -26,11 +27,8 @@ fn skill_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let config = Config::load();
-
-    let mut backend: Box<dyn LlmBackend> = match args.get(1).map(|s| s.as_str()) {
+fn create_backend(args: &[String], config: &Config) -> Box<dyn LlmBackend> {
+    match args.get(1).map(|s| s.as_str()) {
         Some("--llama") => {
             let url = args
                 .get(2)
@@ -72,45 +70,58 @@ fn main() {
                 config.backend.max_tokens,
             ))
         }
-        _ => {
-            let url = config.backend.url.clone();
-            let model = config.backend.model.clone();
-            match config.backend.r#type.as_str() {
-                "openai" => {
-                    let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| {
-                        eprintln!("error: OPENAI_API_KEY not set");
-                        std::process::exit(1);
-                    });
-                    eprintln!("using OpenAI at {} (model: {})", url, model);
-                    Box::new(llm::openai::OpenAIBackend::with_params(
-                        &url,
-                        &model,
-                        &api_key,
-                        config.backend.temperature,
-                        config.backend.max_tokens,
-                    ))
-                }
-                _ => {
-                    eprintln!("lai agent (type your message, Ctrl+D to exit)");
-                    eprintln!("usage: lai [--llama <url> <model> | --openai <url> <model> <api_key>]");
-                    eprintln!("or configure ~/.lai/config.alisp");
-                    Box::new(llm::stdin::StdinBackend)
-                }
-            }
+        _ => create_backend_from_config(config),
+    }
+}
+
+fn create_backend_from_config(config: &Config) -> Box<dyn LlmBackend> {
+    let url = config.backend.url.clone();
+    let model = config.backend.model.clone();
+
+    match config.backend.r#type.as_str() {
+        "openai" => {
+            let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| {
+                eprintln!("error: OPENAI_API_KEY not set");
+                std::process::exit(1);
+            });
+            eprintln!("using OpenAI at {} (model: {})", url, model);
+            Box::new(llm::openai::OpenAIBackend::with_params(
+                &url,
+                &model,
+                &api_key,
+                config.backend.temperature,
+                config.backend.max_tokens,
+            ))
         }
-    };
+        _ => {
+            eprintln!("lai agent (type your message, Ctrl+D to exit)");
+            eprintln!("usage: lai [--llama <url> <model> | --openai <url> <model> <api_key>]");
+            eprintln!("or configure ~/.lai/config.alisp");
+            Box::new(llm::stdin::StdinBackend)
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let config = Config::load();
+    let mut backend = create_backend(&args, &config);
 
     let skill_dirs = skill_dirs();
     let skills = Skill::load_dirs(&skill_dirs);
     if !skills.is_empty() {
-        eprintln!("loaded {} skill(s): {}", skills.len(), skills.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", "));
+        eprintln!(
+            "loaded {} skill(s): {}",
+            skills.len(),
+            skills.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", ")
+        );
     }
 
+    let mem = memory::MemoryManager::new();
     let skill_watcher = SkillWatcher::new(&skill_dirs);
-    let mut agent = Agent::new(config.agent, config.security, &skills);
+    let mut agent = Agent::new(config.agent, config.security, &skills, &mem);
 
     loop {
-        // Check for skill file changes between turns
         if skill_watcher.has_updates() {
             let new_skills = skill_watcher.reload();
             agent.refresh_skills(&new_skills);

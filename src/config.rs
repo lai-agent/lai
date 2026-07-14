@@ -117,7 +117,11 @@ fn parse_alisp_config(content: &str) -> Result<Config, String> {
         audit_log: get_optional_str(&eval, "security-audit-log"),
     };
 
-    Ok(Config { backend, agent, security })
+    Ok(Config {
+        backend,
+        agent,
+        security,
+    })
 }
 
 fn get_str(eval: &Evaluator, name: &str, default: &str) -> String {

@@ -1,5 +1,6 @@
 use crate::config::AgentConfig;
 use crate::llm::{LlmBackend, Message, Role};
+use crate::memory::MemoryManager;
 use crate::security::{SecurityConfig, SecurityPolicy};
 use crate::skills::Skill;
 use crate::tools::AlispHost;
@@ -22,12 +23,23 @@ pub struct Agent {
 }
 
 impl Agent {
-    pub fn new(config: AgentConfig, security: SecurityConfig, skills: &[Skill]) -> Self {
+    pub fn new(
+        config: AgentConfig,
+        security: SecurityConfig,
+        skills: &[Skill],
+        memory: &MemoryManager,
+    ) -> Self {
         let policy = SecurityPolicy::new(security.clone());
         let mut tools = AlispHost::with_policy(policy.clone());
 
         let mut system_prompt = SYSTEM_PROMPT.to_string();
         let mut loaded_skills = HashSet::new();
+
+        // Initialize memory database
+        let mem_init = memory.init_code();
+        if let Err(e) = tools.execute(&mem_init) {
+            eprintln!("warning: memory init failed: {}", e);
+        }
 
         for skill in skills {
             loaded_skills.insert(skill.name.clone());

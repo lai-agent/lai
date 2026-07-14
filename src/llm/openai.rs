@@ -1,6 +1,5 @@
-use super::{LlmBackend, Message, Role};
+use super::{parse_sse_stream, LlmBackend, Message, Role};
 use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use std::time::Duration;
 
 pub struct OpenAIBackend {
@@ -159,40 +158,6 @@ impl LlmBackend for OpenAIBackend {
         let chat_messages = Self::map_messages(messages);
         let mut body = self.send_request(&chat_messages, true)?;
 
-        let reader = body.as_reader();
-        let buf_reader = BufReader::new(reader);
-        let mut full_response = String::new();
-
-        for line in buf_reader.lines() {
-            let line = line.map_err(|e| format!("read stream: {}", e))?;
-            let line = line.trim();
-
-            if line.is_empty() || !line.starts_with("data: ") {
-                continue;
-            }
-
-            let data = &line[6..];
-            if data == "[DONE]" {
-                break;
-            }
-
-            if let Ok(chunk) = serde_json::from_str::<serde_json::Value>(data) {
-                if let Some(choices) = chunk.get("choices").and_then(|c| c.as_array()) {
-                    if let Some(choice) = choices.first() {
-                        if let Some(delta) = choice.get("delta") {
-                            let token = delta.get("content")
-                                .and_then(|c| c.as_str())
-                                .or_else(|| delta.get("reasoning").and_then(|r| r.as_str()));
-                            if let Some(token) = token {
-                                full_response.push_str(token);
-                                on_token(token);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(full_response)
+        parse_sse_stream(body.as_reader(), on_token)
     }
 }

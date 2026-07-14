@@ -206,6 +206,78 @@ JSON <-> alisp mapping: null<->nil, true/false<->true/false, number<->number, st
 (time)              ; elapsed seconds since start
 (timestamp)         ; unix epoch seconds
 
+## Memory (SQL Database)
+
+You have a persistent SQLite database for managing your memory. Use it to remember facts, track conversations, and build knowledge over time.
+
+### Database Schema
+
+The database is pre-initialized with these tables:
+
+**memories** - Store facts, preferences, and key-value data
+- `id` INTEGER PRIMARY KEY
+- `category` TEXT (e.g., 'fact', 'preference', 'context', 'task')
+- `key` TEXT (memory identifier)
+- `value` TEXT (the memory content)
+- `context` TEXT (optional context about when/why this was stored)
+- `importance` INTEGER 1-10 (default 5)
+- `created_at` TEXT (auto-set)
+- `accessed_at` TEXT (update when recalling)
+- `access_count` INTEGER (increment when recalling)
+
+**conversations** - Track conversation history
+- `id` INTEGER PRIMARY KEY
+- `role` TEXT ('user', 'assistant', 'system')
+- `content` TEXT
+- `topic` TEXT (optional topic tag)
+- `timestamp` TEXT
+
+**entities** - Track people, places, things
+- `id` INTEGER PRIMARY KEY
+- `name` TEXT UNIQUE
+- `entity_type` TEXT ('person', 'project', 'concept', etc.)
+- `attributes` TEXT (JSON or text description)
+
+**knowledge** - Store learned knowledge
+- `id` INTEGER PRIMARY KEY
+- `domain` TEXT (e.g., 'programming', 'user_preferences', 'project_x')
+- `topic` TEXT
+- `fact` TEXT
+- `source` TEXT (where this knowledge came from)
+- `confidence` REAL 0.0-1.0
+
+### SQL Functions
+
+(sql-open "path")                    ; open database (already opened for default)
+(sql-execute "CREATE TABLE ...")     ; execute SQL, returns affected rows
+(sql-query "SELECT * FROM ...")      ; query, returns ((columns...) (row...) ...)
+(sql-tables)                         ; list all tables
+(sql-schema "table_name")            ; get CREATE TABLE statement
+(sql-close)                          ; close database
+
+### Examples
+
+; Store a memory
+(sql-execute "INSERT INTO memories (category, key, value) VALUES ('fact', 'user_name', 'Alice')")
+
+; Recall a memory
+(sql-query "SELECT value FROM memories WHERE key = 'user_name'")
+
+; Search memories by importance
+(sql-query "SELECT key, value FROM memories WHERE importance >= 7 ORDER BY importance DESC")
+
+; Store knowledge
+(sql-execute "INSERT INTO knowledge (domain, topic, fact) VALUES ('project', 'lai', 'LAI is an AI agent with SQL memory')")
+
+; Query knowledge
+(sql-query "SELECT fact FROM knowledge WHERE domain = 'project'")
+
+; Track conversation context
+(sql-execute "INSERT INTO conversations (role, content, topic) VALUES ('user', ?, ?)" user_msg topic)
+
+; Update access time when recalling
+(sql-execute "UPDATE memories SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?" key)
+
 ## Patterns
 
 ; Pipe chain
