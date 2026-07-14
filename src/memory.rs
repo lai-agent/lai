@@ -1,37 +1,76 @@
+use std::io::{self, Write};
 use std::path::PathBuf;
 
 pub struct MemoryManager {
     pub db_path: PathBuf,
+    pub project_dir: PathBuf,
 }
 
 impl MemoryManager {
     pub fn new() -> Self {
-        let db_path = Self::default_db_path();
-        Self { db_path }
+        let project_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let db_path = project_dir.join("memory.db");
+        Self {
+            db_path,
+            project_dir,
+        }
     }
 
-    pub fn with_path(db_path: PathBuf) -> Self {
-        Self { db_path }
-    }
+    /// Check if memory.db should be added to .gitignore and prompt user
+    pub fn check_gitignore(&self) {
+        let is_git_repo = self.project_dir.join(".git").is_dir();
+        if !is_git_repo {
+            return;
+        }
 
-    fn default_db_path() -> PathBuf {
-        if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home)
-                .join(".lai")
-                .join("memory.db")
+        let gitignore_path = self.project_dir.join(".gitignore");
+        let should_ignore = if gitignore_path.is_file() {
+            let content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
+            content.lines().any(|l| l.trim() == "memory.db")
         } else {
-            PathBuf::from("memory.db")
+            false
+        };
+
+        if should_ignore {
+            return;
+        }
+
+        eprint!("\nmemory.db is not in .gitignore. Add it? [Y/n] ");
+        io::stderr().flush().ok();
+
+        let mut input = String::new();
+        io::stdin()
+            .read_line(&mut input)
+            .ok();
+
+        let answer = input.trim().to_lowercase();
+        if answer.is_empty() || answer == "y" || answer == "yes" {
+            let entry = if gitignore_path.is_file() {
+                "\nmemory.db\n"
+            } else {
+                "memory.db\n"
+            };
+            if let Err(e) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&gitignore_path)
+                .and_then(|mut f| f.write_all(entry.as_bytes()))
+            {
+                eprintln!("warning: failed to update .gitignore: {}", e);
+            } else {
+                eprintln!("memory: added memory.db to .gitignore");
+            }
         }
     }
 
     /// Returns alisp code to initialize the memory database.
-    /// This opens the DB and creates default tables if they don't exist.
     pub fn init_code(&self) -> String {
         let path = self.db_path.to_string_lossy();
+        let project = self.project_dir.to_string_lossy();
         format!(
             r#"
 (do
-  ;; Open the memory database
+  ;; Open the project memory database
   (sql-open "{path}" "default")
 
   ;; Create core memory tables
@@ -89,10 +128,14 @@ impl MemoryManager {
   (sql-execute "CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)")
   (sql-execute "CREATE INDEX IF NOT EXISTS idx_knowledge_domain ON knowledge(domain)")
 
-  (println "memory: database initialized at {path}")
+  ;; Store project context
+  (sql-execute "INSERT OR IGNORE INTO memories (category, key, value) VALUES ('context', 'project_dir', '{project}')")
+
+  (println "memory: project database initialized at {path}")
 )
 "#,
-            path = path
+            path = path,
+            project = project
         )
     }
 }

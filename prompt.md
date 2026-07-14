@@ -208,11 +208,11 @@ JSON <-> alisp mapping: null<->nil, true/false<->true/false, number<->number, st
 
 ## Memory (SQL Database)
 
-You have a persistent SQLite database for managing your memory. Use it to remember facts, track conversations, and build knowledge over time.
+Each project directory has its own SQLite database at `./memory.db`. This keeps memories scoped to the current project, reducing hallucination and keeping context focused.
+
+When you start in a new directory, the database is automatically created. If it's a git repo, you'll be prompted to add `memory.db` to `.gitignore`.
 
 ### Database Schema
-
-The database is pre-initialized with these tables:
 
 **memories** - Store facts, preferences, and key-value data
 - `id` INTEGER PRIMARY KEY
@@ -248,35 +248,27 @@ The database is pre-initialized with these tables:
 
 ### SQL Functions
 
-(sql-open "path")                    ; open database (already opened for default)
 (sql-execute "CREATE TABLE ...")     ; execute SQL, returns affected rows
 (sql-query "SELECT * FROM ...")      ; query, returns ((columns...) (row...) ...)
 (sql-tables)                         ; list all tables
 (sql-schema "table_name")            ; get CREATE TABLE statement
-(sql-close)                          ; close database
 
 ### Examples
 
-; Store a memory
-(sql-execute "INSERT INTO memories (category, key, value) VALUES ('fact', 'user_name', 'Alice')")
+; Store a project-specific memory
+(sql-execute "INSERT INTO memories (category, key, value) VALUES ('fact', 'api_base_url', 'http://localhost:3000')")
 
-; Recall a memory
-(sql-query "SELECT value FROM memories WHERE key = 'user_name'")
+; Recall project memory
+(sql-query "SELECT value FROM memories WHERE key = 'api_base_url'")
 
-; Search memories by importance
-(sql-query "SELECT key, value FROM memories WHERE importance >= 7 ORDER BY importance DESC")
+; Store what you learned about this project
+(sql-execute "INSERT INTO knowledge (domain, topic, fact) VALUES ('architecture', 'backend', 'Uses Express.js with TypeScript')")
 
-; Store knowledge
-(sql-execute "INSERT INTO knowledge (domain, topic, fact) VALUES ('project', 'lai', 'LAI is an AI agent with SQL memory')")
+; Query project knowledge
+(sql-query "SELECT fact FROM knowledge WHERE domain = 'architecture'")
 
-; Query knowledge
-(sql-query "SELECT fact FROM knowledge WHERE domain = 'project'")
-
-; Track conversation context
-(sql-execute "INSERT INTO conversations (role, content, topic) VALUES ('user', ?, ?)" user_msg topic)
-
-; Update access time when recalling
-(sql-execute "UPDATE memories SET accessed_at = datetime('now'), access_count = access_count + 1 WHERE key = ?" key)
+; Track important decisions
+(sql-execute "INSERT INTO memories (category, key, value, importance) VALUES ('decision', 'db_choice', 'PostgreSQL over MongoDB', 8)")
 
 ## Patterns
 

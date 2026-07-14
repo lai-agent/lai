@@ -118,6 +118,7 @@ fn main() {
     }
 
     let mem = memory::MemoryManager::new();
+    mem.check_gitignore();
     let skill_watcher = SkillWatcher::new(&skill_dirs);
     let mut agent = Agent::new(config.agent, config.security, &skills, &mem);
 
