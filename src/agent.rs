@@ -3,6 +3,7 @@ use crate::llm::{LlmBackend, Message, Role};
 use crate::security::{SecurityConfig, SecurityPolicy};
 use crate::skills::Skill;
 use crate::tools::AlispHost;
+use std::collections::HashSet;
 
 const SYSTEM_PROMPT: &str = r#"You are an AI agent. You can use alisp to interact with the system.
 
@@ -239,7 +240,11 @@ JSON <-> alisp mapping: null<->nil, true/false<->true/false, number<->number, st
 (def pids (re-find-all "\\d+" lines))
 
 When you have completed the task, respond with your final answer directly (no code block needed).
-Always explain what you are doing before and after running code."#;
+Always explain what you are doing before and after running code.
+
+## Skills
+
+When you write a `.alisp` or `.json` file to a skills directory (`skills/` or `~/.lai/skills/`), it is automatically loaded — no need to manually `(read)` and `(eval)` it. Just write the file and the skill will be available on the next turn."#;
 
 /// Rough token estimation: ~4 chars per token for English text.
 fn estimate_tokens(text: &str) -> usize {
@@ -252,6 +257,7 @@ pub struct Agent {
     policy: SecurityPolicy,
     max_turns: u32,
     max_context_tokens: usize,
+    loaded_skills: HashSet<String>,
 }
 
 impl Agent {
@@ -260,8 +266,10 @@ impl Agent {
         let mut tools = AlispHost::with_policy(policy.clone());
 
         let mut system_prompt = SYSTEM_PROMPT.to_string();
+        let mut loaded_skills = HashSet::new();
 
         for skill in skills {
+            loaded_skills.insert(skill.name.clone());
             if !skill.prompt.is_empty() {
                 system_prompt.push_str(&format!("\n\n{}", skill.prompt));
             }
@@ -283,6 +291,51 @@ impl Agent {
             policy,
             max_turns: config.max_turns,
             max_context_tokens: config.max_context_tokens,
+            loaded_skills,
+        }
+    }
+
+    /// Refresh skills: initialize any new skills and update the system prompt.
+    pub fn refresh_skills(&mut self, skills: &[Skill]) {
+        let mut new_count = 0;
+        let mut new_skill_text = String::new();
+
+        for skill in skills {
+            if self.loaded_skills.contains(&skill.name) {
+                continue;
+            }
+            self.loaded_skills.insert(skill.name.clone());
+            new_count += 1;
+
+            eprintln!("hotreload: loaded skill '{}'", skill.name);
+
+            if !skill.prompt.is_empty() {
+                new_skill_text.push_str(&format!("\n\n{}", skill.prompt));
+            }
+            if !skill.init_code.is_empty() {
+                if let Err(e) = self.tools.execute(&skill.init_code) {
+                    eprintln!("warning: skill '{}' init failed: {}", skill.name, e);
+                }
+            }
+        }
+
+        if new_count > 0 {
+            // Rebuild skill index with all skills
+            let index = Skill::skill_index(skills);
+
+            // Find and replace the old skill index in the system prompt
+            let sys_msg = &mut self.messages[0].content;
+            if let Some(pos) = sys_msg.find("\n## Available Skills") {
+                sys_msg.truncate(pos);
+            }
+            sys_msg.push_str(&new_skill_text);
+            sys_msg.push_str(&index);
+
+            eprintln!(
+                "hotreload: {} new skill(s) available (total: {})",
+                new_count,
+                self.loaded_skills.len()
+            );
         }
     }
 

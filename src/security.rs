@@ -1,5 +1,4 @@
 use regex::Regex;
-use serde::Deserialize;
 use std::fs::OpenOptions;
 use std::io::{self, Write};
 use std::path::PathBuf;
@@ -7,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
-#[derive(Debug, Deserialize, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SecurityMode {
     Off,
     Confirm,
@@ -20,127 +19,68 @@ impl Default for SecurityMode {
     }
 }
 
-#[derive(Debug, Deserialize, Clone)]
+impl From<&str> for SecurityMode {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "off" => Self::Off,
+            "strict" => Self::Strict,
+            _ => Self::Confirm,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct SecurityConfig {
-    #[serde(default)]
     pub mode: SecurityMode,
-
-    #[serde(default = "default_blocked_commands")]
     pub blocked_commands: Vec<String>,
-
-    #[serde(default = "default_blocked_paths")]
     pub blocked_paths: Vec<String>,
-
-    #[serde(default = "default_blocked_functions")]
     pub blocked_functions: Vec<String>,
-
-    #[serde(default = "default_true")]
     pub require_confirm_rm: bool,
-
-    #[serde(default = "default_true")]
     pub require_confirm_sudo: bool,
-
-    #[serde(default = "default_true")]
     pub require_confirm_write_system: bool,
-
-    #[serde(default = "default_true")]
     pub require_confirm_eval: bool,
-
-    #[serde(default)]
     pub allow_network: bool,
-
-    #[serde(default = "default_blocked_domains")]
     pub blocked_domains: Vec<String>,
-
-    #[serde(default = "default_allowed_domains")]
     pub allowed_domains: Vec<String>,
-
-    #[serde(default = "default_sandbox_paths")]
     pub sandbox_paths: Vec<String>,
-
-    #[serde(default = "default_max_ops_per_turn")]
     pub max_ops_per_turn: usize,
-
-    #[serde(default = "default_max_output_bytes")]
     pub max_output_bytes: usize,
-
-    #[serde(default = "default_exec_timeout_secs")]
     pub exec_timeout_secs: u64,
-
-    #[serde(default)]
     pub audit_log: Option<String>,
 }
 
-fn default_blocked_commands() -> Vec<String> {
-    vec![
-        "rm -rf /".to_string(),
-        "mkfs".to_string(),
-        ":(){ :|:& };:".to_string(),
-    ]
-}
 
-fn default_blocked_paths() -> Vec<String> {
-    vec![
-        "/etc".to_string(),
-        "/boot".to_string(),
-        "/sys".to_string(),
-        "/proc".to_string(),
-    ]
-}
-
-fn default_blocked_functions() -> Vec<String> {
-    vec![
-        "exit".to_string(),
-        "setenv".to_string(),
-    ]
-}
-
-fn default_blocked_domains() -> Vec<String> {
-    vec![]
-}
-
-fn default_allowed_domains() -> Vec<String> {
-    vec![]
-}
-
-fn default_sandbox_paths() -> Vec<String> {
-    vec![]
-}
-
-fn default_max_ops_per_turn() -> usize {
-    50
-}
-
-fn default_max_output_bytes() -> usize {
-    1024 * 1024 // 1MB
-}
-
-fn default_exec_timeout_secs() -> u64 {
-    60
-}
-
-fn default_true() -> bool {
-    true
-}
 
 impl Default for SecurityConfig {
     fn default() -> Self {
         Self {
             mode: SecurityMode::Confirm,
-            blocked_commands: default_blocked_commands(),
-            blocked_paths: default_blocked_paths(),
-            blocked_functions: default_blocked_functions(),
+            blocked_commands: vec![
+                "rm -rf /".to_string(),
+                "mkfs".to_string(),
+                ":(){ :|:& };:".to_string(),
+            ],
+            blocked_paths: vec![
+                "/etc".to_string(),
+                "/boot".to_string(),
+                "/sys".to_string(),
+                "/proc".to_string(),
+            ],
+            blocked_functions: vec![
+                "exit".to_string(),
+                "setenv".to_string(),
+            ],
             require_confirm_rm: true,
             require_confirm_sudo: true,
             require_confirm_write_system: true,
             require_confirm_eval: true,
             allow_network: true,
-            blocked_domains: default_blocked_domains(),
-            allowed_domains: default_allowed_domains(),
-            sandbox_paths: default_sandbox_paths(),
-            max_ops_per_turn: default_max_ops_per_turn(),
-            max_output_bytes: default_max_output_bytes(),
-            exec_timeout_secs: default_exec_timeout_secs(),
+            blocked_domains: vec![],
+            allowed_domains: vec![],
+            sandbox_paths: vec![],
+            max_ops_per_turn: 50,
+            max_output_bytes: 1024 * 1024,
+            exec_timeout_secs: 60,
             audit_log: None,
         }
     }

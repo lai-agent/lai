@@ -1,5 +1,6 @@
 mod agent;
 mod config;
+mod hotreload;
 mod llm;
 mod security;
 mod skills;
@@ -7,6 +8,7 @@ mod tools;
 
 use agent::Agent;
 use config::Config;
+use hotreload::SkillWatcher;
 use llm::LlmBackend;
 use skills::Skill;
 use std::io::{self, Write};
@@ -91,7 +93,7 @@ fn main() {
                 _ => {
                     eprintln!("lai agent (type your message, Ctrl+D to exit)");
                     eprintln!("usage: lai [--llama <url> <model> | --openai <url> <model> <api_key>]");
-                    eprintln!("or configure ~/.lai/config.toml");
+                    eprintln!("or configure ~/.lai/config.alisp");
                     Box::new(llm::stdin::StdinBackend)
                 }
             }
@@ -104,9 +106,16 @@ fn main() {
         eprintln!("loaded {} skill(s): {}", skills.len(), skills.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(", "));
     }
 
+    let skill_watcher = SkillWatcher::new(&skill_dirs);
     let mut agent = Agent::new(config.agent, config.security, &skills);
 
     loop {
+        // Check for skill file changes between turns
+        if skill_watcher.has_updates() {
+            let new_skills = skill_watcher.reload();
+            agent.refresh_skills(&new_skills);
+        }
+
         eprint!("\nyou> ");
         io::stderr().flush().ok();
 

@@ -40,39 +40,38 @@ export OPENAI_API_KEY=your-openrouter-key
 cargo run -- --openai https://openrouter.ai/api/v1 anthropic/claude-3.5-sonnet
 ```
 
-Or in `~/.lai/config.toml`:
+Or in `~/.lai/config.alisp`:
 
-```toml
-[backend]
-type = "openai"
-url = "https://openrouter.ai/api/v1"
-model = "anthropic/claude-3.5-sonnet"
+```lisp
+(def backend-type "openai")
+(def backend-url "https://openrouter.ai/api/v1")
+(def backend-model "anthropic/claude-3.5-sonnet")
 ```
 
 ## Configuration
 
 lai looks for config in this order:
-1. `lai.toml` in the current directory
-2. `lai.toml` in parent directories (walks up to `/`)
-3. `~/.lai/config.toml` (global fallback)
+1. `lai.alisp` in the current directory
+2. `lai.alisp` in parent directories (walks up to `/`)
+3. `~/.lai/config.alisp` (global fallback)
 
-Create a `lai.toml` in your project root:
+Create a `lai.alisp` in your project root:
 
-```toml
-[backend]
-type = "openai"
-url = "https://openrouter.ai/api/v1"
-model = "anthropic/claude-3.5-sonnet"
-temperature = 0.7
-max_tokens = 4096
+```lisp
+;; Backend
+(def backend-type "openai")
+(def backend-url "https://openrouter.ai/api/v1")
+(def backend-model "anthropic/claude-3.5-sonnet")
+(def backend-temperature 0.7)
+(def backend-max-tokens 4096)
 
-[agent]
-max_turns = 20
-max_context_tokens = 8192
+;; Agent
+(def agent-max-turns 20)
+(def agent-max-context-tokens 8192)
 
-[security]
-mode = "Confirm"
-allow_network = true
+;; Security
+(def security-mode "Confirm")
+(def security-allow-network true)
 ```
 
 Environment variables:
@@ -135,41 +134,40 @@ lai includes a security layer that checks code before execution.
 
 ### Configuration
 
-```toml
-[security]
-mode = "confirm"
+```lisp
+(def security-mode "confirm")
 
-# Network control
-allow_network = true
-blocked_domains = ["malicious.com"]
-allowed_domains = ["api.github.com", "httpbin.org"]
+;; Network control
+(def security-allow-network true)
+(def security-blocked-domains (quote ("malicious.com")))
+(def security-allowed-domains (quote ("api.github.com" "httpbin.org")))
 
-# Dangerous operations
-require_confirm_rm = true
-require_confirm_sudo = true
-require_confirm_write_system = true
-require_confirm_eval = true
+;; Dangerous operations
+(def security-require-confirm-rm true)
+(def security-require-confirm-sudo true)
+(def security-require-confirm-write-system true)
+(def security-require-confirm-eval true)
 
-# Blocked commands (always blocked in strict mode)
-blocked_commands = ["rm -rf /", "mkfs", ":(){ :|:& };:"]
+;; Blocked commands (always blocked in strict mode)
+(def security-blocked-commands (quote ("rm -rf /" "mkfs" ":(){ :|:& };:")))
 
-# Blocked alisp functions (always blocked in strict mode)
-blocked_functions = ["exit", "setenv"]
+;; Blocked alisp functions (always blocked in strict mode)
+(def security-blocked-functions (quote ("exit" "setenv")))
 
-# System paths (blocked from writes)
-blocked_paths = ["/etc", "/boot", "/sys", "/proc"]
+;; System paths (blocked from writes)
+(def security-blocked-paths (quote ("/etc" "/boot" "/sys" "/proc")))
 
-# Sandbox: restrict file writes to these paths
-sandbox_paths = ["/home/user/projects"]
+;; Sandbox: restrict file writes to these paths
+(def security-sandbox-paths (quote ("/home/user/projects")))
 
-# Rate limiting
-max_ops_per_turn = 50
+;; Rate limiting
+(def security-max-ops-per-turn 50)
 
-# Output size limit
-max_output_bytes = 1048576  # 1MB
+;; Output size limit
+(def security-max-output-bytes 1048576)  ;; 1MB
 
-# Audit logging
-audit_log = "/tmp/lai-audit.log"
+;; Audit logging
+(def security-audit-log "/tmp/lai-audit.log")
 ```
 
 ### What it checks
@@ -236,7 +234,7 @@ src/
   tools.rs       alisp evaluator wrapper
   security.rs    Security policy and pre-flight checks
   skills.rs      Skill loading from directories
-  config.rs      ~/.lai/config.toml parser
+  config.rs      ~/.lai/config.alisp parser
   llm/
     mod.rs       LlmBackend trait with streaming support
     stdin.rs     Interactive stdin backend
@@ -286,8 +284,7 @@ Restart lai to load the new skill.
 
 ## Dependencies
 
-- [alisp](https://github.com/jihoo12/alisp) — Lisp interpreter for AI agents
+- [alisp](https://github.com/jihoo12/alisp) — Lisp interpreter for AI agents (also used for config)
 - [ureq](https://github.com/algesten/ureq) — HTTP client
 - [serde](https://serde.rs/) — Serialization
-- [toml](https://github.com/toml-rs/toml) — Config parsing
 - [regex](https://docs.rs/regex) — Pattern matching for security checks
