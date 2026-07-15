@@ -16,7 +16,7 @@ impl MemoryManager {
         }
     }
 
-    /// Check if memory.db should be added to .gitignore and prompt user
+    /// Check if memory.db and related files should be added to .gitignore and prompt user
     pub fn check_gitignore(&self) {
         let is_git_repo = self.project_dir.join(".git").is_dir();
         if !is_git_repo {
@@ -24,18 +24,31 @@ impl MemoryManager {
         }
 
         let gitignore_path = self.project_dir.join(".gitignore");
-        let should_ignore = if gitignore_path.is_file() {
-            let content = std::fs::read_to_string(&gitignore_path).unwrap_or_default();
-            content.lines().any(|l| l.trim() == "memory.db")
+        let content = if gitignore_path.is_file() {
+            std::fs::read_to_string(&gitignore_path).unwrap_or_default()
         } else {
-            false
+            String::new()
         };
 
-        if should_ignore {
+        let has_db = content.lines().any(|l| l.trim() == "memory.db");
+        let has_wal = content.lines().any(|l| l.trim() == "memory.db-wal");
+        let has_shm = content.lines().any(|l| l.trim() == "memory.db-shm");
+
+        let missing: Vec<&str> = [
+            (!has_db).then_some("memory.db"),
+            (!has_wal).then_some("memory.db-wal"),
+            (!has_shm).then_some("memory.db-shm"),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+
+        if missing.is_empty() {
             return;
         }
 
-        eprint!("\nmemory.db is not in .gitignore. Add it? [Y/n] ");
+        let list = missing.join(", ");
+        eprint!("\n{} not in .gitignore. Add? [Y/n] ", list);
         io::stderr().flush().ok();
 
         let mut input = String::new();
@@ -45,10 +58,11 @@ impl MemoryManager {
 
         let answer = input.trim().to_lowercase();
         if answer.is_empty() || answer == "y" || answer == "yes" {
+            let entries = missing.join("\n");
             let entry = if gitignore_path.is_file() {
-                "\nmemory.db\n"
+                format!("\n{}\n", entries)
             } else {
-                "memory.db\n"
+                format!("{}\n", entries)
             };
             if let Err(e) = std::fs::OpenOptions::new()
                 .create(true)
@@ -58,7 +72,7 @@ impl MemoryManager {
             {
                 eprintln!("warning: failed to update .gitignore: {}", e);
             } else {
-                eprintln!("memory: added memory.db to .gitignore");
+                eprintln!("memory: added {} to .gitignore", list);
             }
         }
     }
