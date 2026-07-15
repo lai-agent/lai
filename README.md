@@ -89,9 +89,3 @@ Three modes: `off`, `confirm` (default), `strict`. Configurable via `lai.alisp`.
 ## Documentation
 
 See [docs/docs.md](docs/docs.md) for detailed documentation.
-
-## Dependencies
-
-- [alisp](https://github.com/jihoo12/alisp) — Lisp interpreter
-- [rusqlite](https://github.com/rusqlite/rusqlite) — SQLite
-- [ureq](https://github.com/algesten/ureq) — HTTP client
