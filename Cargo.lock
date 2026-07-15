@@ -32,7 +32,7 @@ dependencies = [
 [[package]]
 name = "alisp"
 version = "0.1.0"
-source = "git+https://github.com/jihoo12/alisp#d5cbe6f01ab12e4f9b9c9cc653f59d391db05954"
+source = "git+https://github.com/lai-agent/alisp#90a69d7d45eb94bbe2919f83cab32f81a193942e"
 dependencies = [
  "rusqlite",
  "scraper",
